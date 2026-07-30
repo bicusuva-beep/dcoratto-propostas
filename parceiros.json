@@ -1,0 +1,37 @@
+[
+ {
+  "file": "logo_parc_0.png",
+  "w": 204,
+  "h": 136,
+  "p25": 236.1,
+  "claro": true
+ },
+ {
+  "file": "logo_parc_1.png",
+  "w": 194,
+  "h": 128,
+  "p25": 118.5,
+  "claro": false
+ },
+ {
+  "file": "logo_parc_2.png",
+  "w": 922,
+  "h": 192,
+  "p25": 254.9,
+  "claro": true
+ },
+ {
+  "file": "logo_parc_3.png",
+  "w": 428,
+  "h": 142,
+  "p25": 157.0,
+  "claro": true
+ },
+ {
+  "file": "logo_parc_4.png",
+  "w": 392,
+  "h": 181,
+  "p25": 83.3,
+  "claro": false
+ }
+]
