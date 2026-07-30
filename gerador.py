@@ -16,7 +16,14 @@ from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
-GF = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets', 'fonts') + '/'
+_BASE = os.path.dirname(os.path.abspath(__file__))
+# Aceita os dois layouts: com pasta assets/ ou tudo solto na raiz.
+_A = os.path.join(_BASE, 'assets')
+_ROOT_ASSETS = not os.path.isdir(_A)
+AS_DIR = _BASE if _ROOT_ASSETS else _A
+GF_DIR = AS_DIR if _ROOT_ASSETS or not os.path.isdir(os.path.join(_A, 'fonts')) \
+         else os.path.join(_A, 'fonts')
+GF = GF_DIR + os.sep
 pdfmetrics.registerFont(TTFont('Lora', GF + 'Lora-Variable.ttf'))
 pdfmetrics.registerFont(TTFont('LoraIt', GF + 'Lora-Italic-Variable.ttf'))
 pdfmetrics.registerFont(TTFont('Pop', GF + 'Poppins-Regular.ttf'))
@@ -31,7 +38,7 @@ RM = 50.0          # margem direita
 CW = W - TX - RM   # 449
 
 UP = os.environ.get('DCO_UPLOADS', './uploads/')
-AS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets') + '/'
+AS = AS_DIR + os.sep
 TMP = os.environ.get('DCO_TMP', './_tmp/')
 os.makedirs(TMP, exist_ok=True)
 
@@ -67,6 +74,8 @@ def gerar(dados, saida):
                           (float(a['parcela']) if a.get('parcela') else None),
                           a.get('desc', ''), list(a.get('fotos', []))))
     TOTAL = sum(a[2] for a in AMBIENTES)
+    _parcs = [a[3] for a in AMBIENTES]
+    TOTAL_PARC = sum(_parcs) if (_parcs and all(p for p in _parcs)) else None
 
     ARQ = dados.get('arquiteto') or {'tipo': 'nenhum'}
 
@@ -114,12 +123,10 @@ def gerar(dados, saida):
         ('Iluminação integrada', 'LED interno e externo com acendimento por sensor de presença, de gesto ou de porta.'),
     ]
     MATERIAIS = [
-        ('MDF', 'Linhas com tecnologia de proteção antimicrobiana de ação natural. Costas de 6mm revestidas nas duas faces e recuadas 16mm.'),
+        ('Madeiras em laminado', 'Melanina na superfície, fundos de 6 mm, caixaria de 15 mm e tamponamentos de 35 mm.'),
         ('Fita de borda', 'Fita vulcânica de 1mm aplicada com cola PUR — fusão perfeita ao painel, sem emendas visíveis.'),
-        ('Ferragens', 'Dobradiças em INOX resistentes à corrosão e corrediças ocultas com amortecimento, suportando até 35kg.'),
+        ('Ferragens', 'Dobradiça inoxidável com slow, corrediças ocultas com amortecimento, suportando até 45 kg.'),
         ('Fixação', 'Cantoneiras metálicas embutidas nas costas dos módulos, suportando até 100kg por armário.'),
-        ('Iluminação', 'Luminárias LED para uso interno nos módulos e aplicação externa em painéis e prateleiras.'),
-        ('Marmoraria', 'Marmoraria própria D’Coratto, com integração total entre marcenaria e superfícies.'),
     ]
     CLIENTES = [('Thiago Miranda', '@thiagomiranda01'), ('Sandra Redivo', '@sanredivo'),
                 ('Valéria Pacheco', '@valeriapachecocoelho'), ('Bia Hulmann', '@biahulmann')]
@@ -357,7 +364,7 @@ def gerar(dados, saida):
 
     iw, ih = 300.0, 300.0
     arco(c, (W - iw) / 2, 84, iw, ih + 34, SAND)
-    c.drawImage(cover(AS + 'embaixador.jpg', iw - 40, ih, 'inst', focus=0.32), (W - iw) / 2 + 20, 100,
+    c.drawImage(cover(AS + 'fabril_2.jpg', iw - 40, ih, 'inst', focus=0.0), (W - iw) / 2 + 20, 100,
                 iw - 40, ih)
     fecha(c)
 
@@ -424,7 +431,7 @@ def gerar(dados, saida):
     c.setFillColorRGB(*WHITE)
     c.rect(0, 0, W, H, fill=1, stroke=0)
     ghost(c, '04', W - RM, H - 150)
-    y = cabeca(c, 'CONHEÇA NOSSOS DIFERENCIAIS', 'O que você', 'vê e usa')
+    y = cabeca(c, 'CONHEÇA NOSSOS DIFERENCIAIS', 'O que', 'temos')
     fio(c, TX, W - RM, y + 14, LINE, 0.5)
     for i, (img, t, d) in enumerate(DIF2):
         y = item_dif(c, img, t, d, y - 4, espelhado=(i % 2 == 1), s=76.0, folga=22.0)
@@ -437,7 +444,7 @@ def gerar(dados, saida):
     faixa_h = 32 + 2 * lin_h + 12
     c.setFillColorRGB(*CHAR)
     c.rect(TX - 14, y - faixa_h, W - (TX - 14), faixa_h, fill=1, stroke=0)
-    tracked(c, 'E AINDA', TX, y - 22, 'PopM', 7, 3, (0.72, 0.62, 0.48))
+    tracked(c, 'E AINDA TEMOS COMO OPÇÃO', TX, y - 22, 'PopM', 7, 3, (0.72, 0.62, 0.48))
     yy = y - 40
     for i, (t, d) in enumerate(DIF_TXT):
         col = i % 2
@@ -493,7 +500,9 @@ def gerar(dados, saida):
         y = cabeca(c, 'AMBIENTE ' + n, nome)
         y = para(c, desc, TX, y + 10, 'PopL', 9.2, 15.5, CW) - 26
 
-        if len(fotos) == 1:
+        if not fotos:
+            y = y - 20
+        elif len(fotos) == 1:
             render_h(c, fotos[0], TX, y - 300, CW, 300, f'r{n}_0')
             y = y - 300 - 32
         else:
@@ -508,9 +517,10 @@ def gerar(dados, saida):
         c.setFont('Lora', 24)
         c.setFillColorRGB(*CHAR)
         c.drawRightString(W - RM, y - 26, brl(val))
-        c.setFont('PopL', 8)
-        c.setFillColorRGB(*GREY)
-        c.drawRightString(W - RM, y - 42, f'ou 12x de {brl(parc)}')
+        if parc:
+            c.setFont('PopL', 8)
+            c.setFillColorRGB(*GREY)
+            c.drawRightString(W - RM, y - 42, f'ou 12x de {brl(parc)}')
         fecha(c)
 
     # ============================ INVESTIMENTO ============================
@@ -534,9 +544,10 @@ def gerar(dados, saida):
         c.setFont('Lora', 16)
         c.setFillColorRGB(*CHAR)
         c.drawRightString(W - RM, y, brl(val))
-        c.setFont('PopL', 7.6)
-        c.setFillColorRGB(*BRONZE)
-        c.drawRightString(W - RM, y - 14, f'ou 12x de {brl(parc)}')
+        if parc:
+            c.setFont('PopL', 7.6)
+            c.setFillColorRGB(*BRONZE)
+            c.drawRightString(W - RM, y - 14, f'ou 12x de {brl(parc)}')
         yy = para(c, desc, TX, y - 20, 'PopL', 8.2, 12.5, CW - 150, GREY)
         fio(c, TX, W - RM, yy - 8, LINE, 0.5)
         y = yy - 34
@@ -551,6 +562,10 @@ def gerar(dados, saida):
     c.setFont('Lora', 30)
     c.setFillColorRGB(*WHITE)
     c.drawRightString(W - RM, y - 52, brl(TOTAL))
+    if TOTAL_PARC:
+        c.setFont('PopL', 8)
+        c.setFillColorRGB(0.72, 0.72, 0.74)
+        c.drawRightString(W - RM, y - 68, f'ou 12x de {brl(TOTAL_PARC)}')
 
     y -= 132
     c.setFont('PopM', 8.6)
