@@ -53,6 +53,10 @@ st.markdown("""
       background:#FFFFFF !important; color:#35363A !important; }
   [data-testid="stFileUploaderDropzone"] { background:#FFFFFF !important; }
   [data-testid="stNotification"] * { color:inherit !important; }
+  /* Botoes escuros: o texto fica dentro de div/span, que a regra acima pintaria
+     de grafite sobre fundo grafite (invisivel). Reforca o branco no botao inteiro. */
+  .stButton > button, .stButton > button *,
+  .stDownloadButton > button, .stDownloadButton > button * { color:#FFFFFF !important; }
   h1, h2, h3 { color:#35363A; font-family:Georgia, serif; }
   .dco-title { font-family:Georgia,serif; font-size:30px; color:#35363A; margin-bottom:0; }
   .dco-title i { color:#A7723B; }
