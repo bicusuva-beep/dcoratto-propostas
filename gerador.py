@@ -64,6 +64,7 @@ def gerar(dados, saida):
     DATA = dados['data']
     VALIDADE = dados.get('validade') or '10 dias'
     PAGAMENTO = dados.get('pagamento') or ''
+    NPARC = int(dados.get('parcelas') or 12)
     PRAZO = dados.get('prazo') or ''
     CONTATO = ''
 
@@ -520,7 +521,7 @@ def gerar(dados, saida):
         if parc:
             c.setFont('PopL', 8)
             c.setFillColorRGB(*GREY)
-            c.drawRightString(W - RM, y - 42, f'ou 12x de {brl(parc)}')
+            c.drawRightString(W - RM, y - 42, f'ou {NPARC}x de {brl(parc)}')
         fecha(c)
 
     # ============================ INVESTIMENTO ============================
@@ -547,7 +548,7 @@ def gerar(dados, saida):
         if parc:
             c.setFont('PopL', 7.6)
             c.setFillColorRGB(*BRONZE)
-            c.drawRightString(W - RM, y - 14, f'ou 12x de {brl(parc)}')
+            c.drawRightString(W - RM, y - 14, f'ou {NPARC}x de {brl(parc)}')
         yy = para(c, desc, TX, y - 20, 'PopL', 8.2, 12.5, CW - 150, GREY)
         fio(c, TX, W - RM, yy - 8, LINE, 0.5)
         y = yy - 34
@@ -565,7 +566,7 @@ def gerar(dados, saida):
     if TOTAL_PARC:
         c.setFont('PopL', 8)
         c.setFillColorRGB(0.72, 0.72, 0.74)
-        c.drawRightString(W - RM, y - 68, f'ou 12x de {brl(TOTAL_PARC)}')
+        c.drawRightString(W - RM, y - 68, f'ou {NPARC}x de {brl(TOTAL_PARC)}')
 
     y -= 132
     c.setFont('PopM', 8.6)
@@ -575,6 +576,17 @@ def gerar(dados, saida):
     c.setFillColorRGB(*MID)
     c.drawString(TX + 132, y, VALIDADE)
     fio(c, TX, W - RM, y - 10, LINE, 0.4)
+    if PAGAMENTO:
+        y -= 26
+        c.setFont('PopM', 8.6)
+        c.setFillColorRGB(*CHAR)
+        c.drawString(TX, y, 'Forma de pagamento')
+        _lns = wrap(PAGAMENTO, 'PopL', 8.6, CW - 132)[:3]
+        c.setFont('PopL', 8.6)
+        c.setFillColorRGB(*MID)
+        for _i, _ln in enumerate(_lns):
+            c.drawString(TX + 132, y - _i * 12, _ln)
+        fio(c, TX, W - RM, y - 10 - (12 * (len(_lns) - 1)), LINE, 0.4)
     fecha(c)
 
     # ============================ MATERIAIS ============================
