@@ -34,35 +34,27 @@ def _carrega_arquitetos():
 
 ARQ_SALVOS = _carrega_arquitetos()
 
+
+def _br(v):
+    """Formata numero no padrao brasileiro: 46489.81 -> 46.489,81"""
+    return f"{v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
 st.set_page_config(page_title="D'Coratto · Gerador de Propostas",
                    page_icon="📄", layout="centered")
 
 # ------------------------------------------------------------------ estilo
 st.markdown("""
 <style>
-  .stApp { background:#F4F1EC; }
-  /* Garante contraste mesmo se o navegador estiver em modo escuro. */
-  .stApp, .stApp p, .stApp span, .stApp div, .stApp label,
-  .stMarkdown, [data-testid="stWidgetLabel"], [data-testid="stWidgetLabel"] * ,
-  .stRadio label, .stCaption, [data-testid="stCaptionContainer"],
-  [data-testid="stFileUploaderDropzone"] { color:#35363A !important; }
-  .stTextInput input, .stTextArea textarea, .stNumberInput input {
-      background:#FFFFFF !important; color:#35363A !important;
-      border:1px solid #D8D2C7 !important; }
-  .stSelectbox div[data-baseweb="select"] > div {
-      background:#FFFFFF !important; color:#35363A !important; }
-  [data-testid="stFileUploaderDropzone"] { background:#FFFFFF !important; }
-  [data-testid="stNotification"] * { color:inherit !important; }
-  /* Botoes escuros: o texto fica dentro de div/span, que a regra acima pintaria
-     de grafite sobre fundo grafite (invisivel). Reforca o branco no botao inteiro. */
-  .stButton > button, .stButton > button *,
-  .stDownloadButton > button, .stDownloadButton > button * { color:#FFFFFF !important; }
+  /* O tema (fundo, cor de texto, tema claro fixo) vem de .streamlit/config.toml.
+     Aqui ficam SO os detalhes de marca. Nao usar seletores genericos com
+     !important: eles atingem o texto dentro dos botoes e o deixam invisivel. */
   h1, h2, h3 { color:#35363A; font-family:Georgia, serif; }
   .dco-title { font-family:Georgia,serif; font-size:30px; color:#35363A; margin-bottom:0; }
   .dco-title i { color:#A7723B; }
   .dco-sub { color:#737378; font-size:14px; margin-top:2px; margin-bottom:18px; }
   .dco-kicker { color:#A7723B; letter-spacing:2.5px; font-size:12px; text-transform:uppercase;
                 font-weight:600; margin:22px 0 6px; }
+  .dco-total { text-align:right; font-family:Georgia,serif; font-size:22px; color:#35363A; }
   .stButton>button { background:#35363A; color:#fff; border:none; border-radius:8px;
                      padding:10px 20px; font-weight:500; }
   .stButton>button:hover { background:#26272b; color:#fff; }
@@ -116,6 +108,9 @@ cadd, cdel = st.columns([1, 1])
 if cadd.button("➕ Adicionar ambiente"):
     st.session_state.n_amb += 1
 if cdel.button("➖ Remover último") and st.session_state.n_amb > 1:
+    _i = st.session_state.n_amb - 1
+    for _k in (f"nome{_i}", f"desc{_i}", f"valor{_i}", f"parc{_i}", f"fotos{_i}"):
+        st.session_state.pop(_k, None)
     st.session_state.n_amb -= 1
 
 ambientes = []
@@ -140,9 +135,7 @@ for i in range(st.session_state.n_amb):
 
 # total ao vivo
 _total = sum(a["valor"] for a in ambientes if a["valor"])
-st.markdown(f"<div style='text-align:right; font-family:Georgia,serif; font-size:22px; "
-            f"color:#35363A;'>Total: R$ {_total:,.2f}</div>".replace(",", "X")
-            .replace(".", ",").replace("X", "."), unsafe_allow_html=True)
+st.markdown(f'<div class="dco-total">Total: R$ {_br(_total)}</div>', unsafe_allow_html=True)
 
 # ------------------------------------------------------------------ arquiteto
 st.markdown('<div class="dco-kicker">Arquiteto do projeto</div>', unsafe_allow_html=True)
@@ -151,7 +144,7 @@ if ARQ_SALVOS:
     _opcoes.append("Escolher da lista")
 _opcoes.append("Cadastrar novo")
 
-modo = st.radio("", _opcoes, horizontal=True, label_visibility="collapsed")
+modo = st.radio("Arquiteto", _opcoes, horizontal=True, label_visibility="collapsed")
 
 arq = {"tipo": "nenhum"}
 
@@ -196,9 +189,6 @@ else:
 st.divider()
 
 # ------------------------------------------------------------------ gerar
-def _br(v):
-    return f"{v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
 if st.button("Gerar proposta em PDF", type="primary"):
     erros = []
     if not cliente.strip():
@@ -208,10 +198,14 @@ if st.button("Gerar proposta em PDF", type="primary"):
             erros.append(f"Ambiente {i + 1:02d} está sem nome.")
         if not a["valor"] or a["valor"] <= 0:
             erros.append(f"Ambiente {i + 1:02d} está sem valor.")
+    _sem_foto = [f"{i + 1:02d}" for i, a in enumerate(ambientes) if not a["fotos_raw"]]
     if erros:
         for e in erros:
             st.error(e)
     else:
+        if _sem_foto:
+            st.warning("Sem foto no(s) ambiente(s) " + ", ".join(_sem_foto)
+                       + ". A página sai só com o texto e o valor.")
         with st.spinner("Gerando o PDF…"):
             tmp = tempfile.mkdtemp()
             os.environ["DCO_TMP"] = os.path.join(tmp, "_render")
