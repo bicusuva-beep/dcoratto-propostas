@@ -63,33 +63,24 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ------------------------------------------------------------------ acesso
-# A senha e lida de st.secrets["APP_SENHA"]. Se nao estiver configurada,
-# o app abre normalmente (uso local). Em producao, SEMPRE configure a senha.
-_SENHA = st.secrets.get("APP_SENHA", "") if hasattr(st, "secrets") else ""
-if _SENHA:
-    if not st.session_state.get("_ok"):
-        st.markdown('<div class="dco-title">Gerador de <i>Propostas</i></div>',
-                    unsafe_allow_html=True)
-        st.markdown('<div class="dco-sub">Acesso restrito à equipe D\'Coratto.</div>',
-                    unsafe_allow_html=True)
-        _t = st.text_input("Senha de acesso", type="password")
-        if st.button("Entrar"):
-            if _t == _SENHA:
-                st.session_state["_ok"] = True
-                st.rerun()
-            else:
-                st.error("Senha incorreta.")
-        st.stop()
-
 st.markdown('<div class="dco-title">Gerador de <i>Propostas</i></div>', unsafe_allow_html=True)
 st.markdown('<div class="dco-sub">Preencha os campos, adicione as fotos de cada ambiente e '
             'gere o PDF no formato aprovado. A data entra automática no dia da geração.</div>',
             unsafe_allow_html=True)
 
 # ------------------------------------------------------------------ estado
-if "n_amb" not in st.session_state:
-    st.session_state.n_amb = 1
+# 'slots' guarda IDs estaveis dos ambientes. A ORDEM da lista e a ordem que sai
+# no PDF. Reordenar = trocar posicoes nesta lista; os campos nao sao tocados,
+# porque cada widget usa a key do seu slot, nao a posicao.
+if "slots" not in st.session_state:
+    st.session_state.slots = [0]
+    st.session_state.prox_id = 1
+
+# reordenacao pendente, aplicada ANTES dos widgets existirem
+if "_mover" in st.session_state:
+    _a, _b = st.session_state.pop("_mover")
+    _s = st.session_state.slots
+    _s[_a], _s[_b] = _s[_b], _s[_a]
 
 # ------------------------------------------------------------------ dados do projeto
 st.markdown('<div class="dco-kicker">Dados do projeto</div>', unsafe_allow_html=True)
@@ -100,34 +91,50 @@ c3, c4 = st.columns(2)
 validade = c3.text_input("Validade da proposta", value="10 dias")
 pagamento = c4.text_input("Forma de pagamento (opcional)",
                           placeholder="ex.: 40% entrada + 12x no cartão")
+n_parcelas = st.number_input("Parcelar em até quantas vezes", min_value=1, max_value=48,
+                             value=12, step=1,
+                             help="Usado nas linhas 'ou Nx de R$ ...' do PDF.")
 
 # ------------------------------------------------------------------ ambientes
 st.markdown('<div class="dco-kicker">Ambientes</div>', unsafe_allow_html=True)
 
 cadd, cdel = st.columns([1, 1])
 if cadd.button("➕ Adicionar ambiente"):
-    st.session_state.n_amb += 1
-if cdel.button("➖ Remover último") and st.session_state.n_amb > 1:
-    _i = st.session_state.n_amb - 1
-    for _k in (f"nome{_i}", f"desc{_i}", f"valor{_i}", f"parc{_i}", f"fotos{_i}"):
+    st.session_state.slots.append(st.session_state.prox_id)
+    st.session_state.prox_id += 1
+if cdel.button("➖ Remover último") and len(st.session_state.slots) > 1:
+    _sid = st.session_state.slots.pop()
+    for _k in (f"nome{_sid}", f"desc{_sid}", f"valor{_sid}", f"parc{_sid}", f"fotos{_sid}"):
         st.session_state.pop(_k, None)
-    st.session_state.n_amb -= 1
+
+st.caption("Use ▲ ▼ para mudar a ordem em que os ambientes aparecem no PDF.")
 
 ambientes = []
-for i in range(st.session_state.n_amb):
+_total_slots = len(st.session_state.slots)
+for pos, sid in enumerate(st.session_state.slots):
     with st.container(border=True):
-        st.markdown(f"**Ambiente {i + 1:02d}**")
-        nome = st.text_input("Nome do ambiente", key=f"nome{i}",
+        hcab, hsobe, hdesce = st.columns([6, 1, 1])
+        hcab.markdown(f"**Ambiente {pos + 1:02d}**")
+        if hsobe.button("▲", key=f"up{sid}", disabled=(pos == 0),
+                        help="Subir este ambiente"):
+            st.session_state["_mover"] = (pos, pos - 1)
+            st.rerun()
+        if hdesce.button("▼", key=f"dn{sid}", disabled=(pos == _total_slots - 1),
+                         help="Descer este ambiente"):
+            st.session_state["_mover"] = (pos, pos + 1)
+            st.rerun()
+        nome = st.text_input("Nome do ambiente", key=f"nome{sid}",
                              placeholder="ex.: Cozinha, Cristaleira, Closet...")
-        desc = st.text_area("Descrição", key=f"desc{i}", height=90,
+        desc = st.text_area("Descrição", key=f"desc{sid}", height=90,
                             placeholder="Materiais, acabamentos, iluminação, ferragens...")
         v1, v2 = st.columns(2)
-        valor = v1.number_input("Valor à vista (R$)", key=f"valor{i}",
+        valor = v1.number_input("Valor à vista (R$)", key=f"valor{sid}",
                                 min_value=0.0, step=100.0, format="%.2f")
-        parcela = v2.number_input("Valor da parcela 12x (R$) — opcional", key=f"parc{i}",
+        parcela = v2.number_input(f"Valor da parcela {n_parcelas}x (R$) — opcional",
+                                  key=f"parc{sid}",
                                   min_value=0.0, step=10.0, format="%.2f")
         fotos = st.file_uploader("Fotos (1 = página inteira · 2 = empilhadas)",
-                                 key=f"fotos{i}", type=["jpg", "jpeg", "png"],
+                                 key=f"fotos{sid}", type=["jpg", "jpeg", "png"],
                                  accept_multiple_files=True)
         ambientes.append({"nome": nome, "desc": desc, "valor": valor,
                           "parcela": parcela if parcela > 0 else None,
@@ -189,6 +196,82 @@ else:
 st.divider()
 
 # ------------------------------------------------------------------ gerar
+def _valida():
+    """Devolve (erros, avisos) sem gerar nada."""
+    er, av = [], []
+    if not cliente.strip():
+        er.append("Informe o nome do cliente.")
+    for k, a in enumerate(ambientes):
+        if not a["nome"].strip():
+            er.append(f"Ambiente {k + 1:02d} está sem nome.")
+        if not a["valor"] or a["valor"] <= 0:
+            er.append(f"Ambiente {k + 1:02d} está sem valor.")
+        if not a["fotos_raw"]:
+            av.append(f"Ambiente {k + 1:02d} está sem foto — a página sai só com texto e valor.")
+        if not a["desc"].strip():
+            av.append(f"Ambiente {k + 1:02d} está sem descrição.")
+        if not a["parcela"]:
+            av.append(f"Ambiente {k + 1:02d} está sem valor de parcela — a linha "
+                      f"'ou {n_parcelas}x de ...' não aparece.")
+    if not pagamento.strip():
+        av.append("Forma de pagamento em branco — não aparece no PDF.")
+    elif len(pagamento.strip()) > 170:
+        av.append(f"Forma de pagamento com {len(pagamento.strip())} caracteres. "
+                  f"No PDF cabem cerca de 170 (3 linhas) — o excedente é cortado. "
+                  f"Encurte o texto.")
+    return er, av
+
+
+# ------------------------------------------------------------------ conferir
+if st.button("👁 Conferir antes de gerar"):
+    st.session_state["_ver"] = True
+
+if st.session_state.get("_ver"):
+    _er, _av = _valida()
+    st.markdown('<div class="dco-kicker">Conferência</div>', unsafe_allow_html=True)
+    for _e in _er:
+        st.error(_e)
+    for _a in _av:
+        st.warning(_a)
+    if not _er and not _av:
+        st.success("Nada pendente.")
+
+    with st.container(border=True):
+        st.markdown(f"**Cliente:** {cliente.strip() or '— em branco —'}")
+        st.markdown(f"**Nº da proposta:** {proposta.strip() or '— em branco —'}")
+        st.markdown(f"**Data no PDF:** {date.today().strftime('%d/%m/%Y')}")
+        st.markdown(f"**Validade:** {validade.strip() or '10 dias'}")
+        st.markdown(f"**Forma de pagamento:** {pagamento.strip() or '— não sai no PDF —'}")
+        _arqtxt = arq.get("nome", "").strip() if arq["tipo"] == "novo" else ""
+        st.markdown(f"**Arquiteto em destaque:** {_arqtxt or '— nenhum —'}")
+
+    _tp = 0.0
+    for k, a in enumerate(ambientes):
+        with st.container(border=True):
+            st.markdown(f"**Página do ambiente {k + 1:02d} — "
+                        f"{a['nome'].strip() or '(sem nome)'}**")
+            st.write(a["desc"].strip() or "_(sem descrição)_")
+            cv1, cv2 = st.columns(2)
+            cv1.markdown(f"À vista: **R$ {_br(a['valor'] or 0)}**")
+            if a["parcela"]:
+                cv2.markdown(f"ou **{n_parcelas}x de R$ {_br(a['parcela'])}**")
+                _tp += a["parcela"]
+            else:
+                cv2.markdown("_sem parcelamento_")
+            if a["fotos_raw"]:
+                st.image([f for f in a["fotos_raw"]], width=190)
+            else:
+                st.caption("Sem foto.")
+    st.markdown(f'<div class="dco-total">Total: R$ {_br(_total)}</div>',
+                unsafe_allow_html=True)
+    if _tp and all(a["parcela"] for a in ambientes):
+        st.markdown(f'<div class="dco-total">ou {n_parcelas}x de R$ {_br(_tp)}</div>',
+                    unsafe_allow_html=True)
+    else:
+        st.caption(f"A linha 'ou {n_parcelas}x de ...' do total só aparece no PDF se "
+                   f"TODOS os ambientes tiverem valor de parcela.")
+    st.divider()
+
 if st.button("Gerar proposta em PDF", type="primary"):
     erros = []
     if not cliente.strip():
@@ -206,6 +289,9 @@ if st.button("Gerar proposta em PDF", type="primary"):
         if _sem_foto:
             st.warning("Sem foto no(s) ambiente(s) " + ", ".join(_sem_foto)
                        + ". A página sai só com o texto e o valor.")
+        if len(pagamento.strip()) > 170:
+            st.warning(f"A forma de pagamento tem {len(pagamento.strip())} caracteres; "
+                       f"no PDF cabem cerca de 170. O texto foi cortado.")
         with st.spinner("Gerando o PDF…"):
             tmp = tempfile.mkdtemp()
             os.environ["DCO_TMP"] = os.path.join(tmp, "_render")
@@ -240,6 +326,7 @@ if st.button("Gerar proposta em PDF", type="primary"):
                 "data": date.today().strftime("%d/%m/%Y"),
                 "validade": validade.strip() or "10 dias",
                 "pagamento": pagamento.strip(),
+                "parcelas": int(n_parcelas),
                 "ambientes": amb_final,
                 "arquiteto": arq_final,
             }
