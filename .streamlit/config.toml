@@ -1,0 +1,12 @@
+# Fixa o tema CLARO. Sem isso, quem estiver com o navegador/Windows em modo
+# escuro ve os textos do formulario em branco sobre o fundo bege (invisiveis).
+[theme]
+base = "light"
+primaryColor = "#A7723B"
+backgroundColor = "#F4F1EC"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#35363A"
+font = "sans serif"
+
+[client]
+toolbarMode = "minimal"
