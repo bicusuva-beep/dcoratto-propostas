@@ -131,9 +131,23 @@ def gerar(dados, saida):
     ]
     CLIENTES = [('Thiago Miranda', '@thiagomiranda01'), ('Sandra Redivo', '@sanredivo'),
                 ('Valéria Pacheco', '@valeriapachecocoelho'), ('Bia Hulmann', '@biahulmann')]
-    ARQUITETOS = [('Tamyres Marques', '@tamyarquiteta'), ('Jornate Obras', '@jornateobras'),
-                  ('Eng. Kethelyn', '@legus.engenharia'), ('Bianca Jurtick', '@aconstrutora.br'),
-                  ('Carol Cunha', '@carolcunha.designinealmeida.ca')]
+    # (nome, @, arquivo da foto) na ordem definida pela D'Coratto. O arquivo vai
+    # explicito para o nome nunca depender da posicao — era isso que causava a
+    # troca de nome com foto.
+    _ARQ_ORDEM = [
+        ('Tamyres Marques', '@tamyarquiteta', 'arq_3.jpg'),
+        ('Luana Inaimo', '@arq.luinaimo', 'arq_luana.jpg'),
+        ('Felipe Vale Lopes', '@angararquitetura', 'arq_felipe.jpg'),
+        ('Bianca Jurtick', '@aconstrutora.br', 'arq_4.jpg'),
+        ('Caique Nogueira', '@arquiteto.caiquenogueira', 'arq_caique.jpg'),
+        ('Karin Martins', '@km_arqdesigner', 'arq_km.jpg'),
+        ('Eng. Kethelyn', '@legus.engenharia', 'arq_1.jpg'),
+        ('Eduardo Felipe', '@aha_arquitetura', 'arq_eduardo.jpg'),
+        ('Jornate Obras', '@jornateobras', 'arq_2.jpg'),
+        ('Carol Cunha', '@carolcunha.designinealmeida.ca', 'arq_0.jpg'),
+    ]
+    # so entra quem tem a foto de fato no disco (evita quebrar a geracao)
+    ARQUITETOS = [t for t in _ARQ_ORDEM if os.path.exists(AS + t[2])]
     PARCEIROS = json.load(open(AS + 'parceiros.json'))
 
 
@@ -501,16 +515,35 @@ def gerar(dados, saida):
         y = cabeca(c, 'AMBIENTE ' + n, nome)
         y = para(c, desc, TX, y + 10, 'PopL', 9.2, 15.5, CW) - 26
 
+        # Todas as fotos enviadas entram NESTA pagina (a que leva o preco).
+        # A 1a foto do 1o ambiente tambem e reaproveitada como fundo da capa e
+        # da pag. 6 — reaproveitamento, nunca substituicao.
+        gap = 14.0
+        hw = (CW - gap) / 2          # meia largura
         if not fotos:
             y = y - 20
         elif len(fotos) == 1:
             render_h(c, fotos[0], TX, y - 300, CW, 300, f'r{n}_0')
             y = y - 300 - 32
-        else:
+        elif len(fotos) == 2:
             bh = 214.0
-            gap = 14.0
             render_h(c, fotos[0], TX, y - bh, CW, bh, f'r{n}_0')
             render_h(c, fotos[1], TX, y - 2 * bh - gap, CW, bh, f'r{n}_1')
+            y = y - 2 * bh - gap - 28
+        elif len(fotos) == 3:
+            # 1 larga em cima + 2 lado a lado embaixo (mesma altura total de 2 fotos)
+            bh1, bh2 = 240.0, 188.0
+            render_h(c, fotos[0], TX, y - bh1, CW, bh1, f'r{n}_0')
+            render_h(c, fotos[1], TX, y - bh1 - gap - bh2, hw, bh2, f'r{n}_1')
+            render_h(c, fotos[2], TX + hw + gap, y - bh1 - gap - bh2, hw, bh2, f'r{n}_2')
+            y = y - bh1 - gap - bh2 - 28
+        else:
+            # 4 fotos: grade 2x2
+            bh = 214.0
+            for _k in range(4):
+                _cx = TX + (_k % 2) * (hw + gap)
+                _cy = y - (_k // 2 + 1) * bh - (_k // 2) * gap
+                render_h(c, fotos[_k], _cx, _cy, hw, bh, f'r{n}_{_k}')
             y = y - 2 * bh - gap - 28
 
         fio(c, TX, W - RM, y + 4, LINE, 0.5)
@@ -725,6 +758,33 @@ def gerar(dados, saida):
     fecha(c)
 
     # ---------------------------- ARQUITETOS ----------------------------
+    def grade_arq(c, y):
+        """Grade da rede em 4 colunas (foto ~3,5 cm). Ate 12 pessoas cabem."""
+        cols = 4
+        gap = 18.0
+        fw = (CW - gap * (cols - 1)) / cols
+        for i, (nome, arroba, _fimg) in enumerate(ARQUITETOS):
+            col, row = i % cols, i // cols
+            bx = TX + col * (fw + gap)
+            by = y - row * (fw + 52)
+            arco(c, bx, by - fw - 6, fw, fw + 20, SAND)
+            c.drawImage(cover(AS + _fimg, fw - 16, fw - 16, f'arqp{i}', focus=0.5),
+                        bx + 8, by - fw + 2, fw - 16, fw - 16)
+            c.setFont('PopM', 7.6)
+            c.setFillColorRGB(*CHAR)
+            for _j, _ln in enumerate(wrap(nome, 'PopM', 7.6, fw)[:2]):
+                c.drawString(bx, by - fw - 20 - _j * 10, _ln)
+            # @ longo encolhe ate caber na coluna (ex.: @carolcunha.designinealmeida.ca)
+            _fs = 6.4
+            while _fs > 4.8 and pdfmetrics.stringWidth(arroba, 'PopL', _fs) > fw:
+                _fs -= 0.2
+            c.setFont('PopL', _fs)
+            c.setFillColorRGB(*BRONZE)
+            c.drawString(bx, by - fw - 31 - (10 if len(wrap(nome, 'PopM', 7.6, fw)) > 1 else 0),
+                         arroba)
+        return y - (-(-len(ARQUITETOS) // cols)) * (fw + 52)
+
+
     c.setFillColorRGB(*WHITE)
     c.rect(0, 0, W, H, fill=1, stroke=0)
     ghost(c, '09', W - RM, H - 150)
@@ -764,44 +824,22 @@ def gerar(dados, saida):
         fio(c, TX, W - RM, y - dh - 22, LINE, 0.5)
         y = y - dh - 44
 
-        cols = 3
-        gap = 18.0
-        fw = (CW - gap * (cols - 1)) / cols
-        for i, (nome, arroba) in enumerate(ARQUITETOS):
-            col, row = i % cols, i // cols
-            bx = TX + col * (fw + gap)
-            by = y - row * (fw + 52)
-            arco(c, bx, by - fw - 6, fw, fw + 20, SAND)
-            c.drawImage(cover(AS + f'arq_{i}.jpg', fw - 16, fw - 16, f'arqp{i}', focus=0.5),
-                        bx + 8, by - fw + 2, fw - 16, fw - 16)
-            c.setFont('PopM', 8.4)
-            c.setFillColorRGB(*CHAR)
-            c.drawString(bx, by - fw - 20, nome)
-            c.setFont('PopL', 7.2)
-            c.setFillColorRGB(*BRONZE)
-            c.drawString(bx, by - fw - 31, arroba)
+        fecha(c)
+
+        # ---- pagina dedicada: a rede completa ----
+        c.setFillColorRGB(*WHITE)
+        c.rect(0, 0, W, H, fill=1, stroke=0)
+        y = cabeca(c, 'REDE D’CORATTO', 'Arquitetos', 'e engenheiros')
+        y = para(c, 'Profissionais que especificam D’Coratto nos seus projetos.',
+                 TX, y + 10, 'PopL', 9, 14, CW, GREY) - 34
+        grade_arq(c, y)
         fecha(c)
     else:
         # sem arquiteto do projeto: rede completa em grade de 3, sem destaque
         y = cabeca(c, 'REDE D’CORATTO', 'Arquitetos', 'e engenheiros')
         y = para(c, 'Profissionais que especificam D’Coratto nos seus projetos.',
                  TX, y + 10, 'PopL', 9, 14, CW, GREY) - 30
-        cols = 3
-        gap = 18.0
-        fw = (CW - gap * (cols - 1)) / cols
-        for i, (nome, arroba) in enumerate(ARQUITETOS):
-            col, row = i % cols, i // cols
-            bx = TX + col * (fw + gap)
-            by = y - row * (fw + 60)
-            arco(c, bx, by - fw - 6, fw, fw + 22, SAND)
-            c.drawImage(cover(AS + f'arq_{i}.jpg', fw - 16, fw - 16, f'arqp{i}', focus=0.5),
-                        bx + 8, by - fw + 2, fw - 16, fw - 16)
-            c.setFont('PopM', 8.6)
-            c.setFillColorRGB(*CHAR)
-            c.drawString(bx, by - fw - 22, nome)
-            c.setFont('PopL', 7.2)
-            c.setFillColorRGB(*BRONZE)
-            c.drawString(bx, by - fw - 34, arroba)
+        grade_arq(c, y)
         fecha(c)
 
     # ============================ ENCERRAMENTO ============================
