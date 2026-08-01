@@ -133,12 +133,12 @@ for pos, sid in enumerate(st.session_state.slots):
         parcela = v2.number_input(f"Valor da parcela {n_parcelas}x (R$) — opcional",
                                   key=f"parc{sid}",
                                   min_value=0.0, step=10.0, format="%.2f")
-        fotos = st.file_uploader("Fotos (1 = página inteira · 2 = empilhadas)",
+        fotos = st.file_uploader("Fotos do ambiente (1 a 4 — todas entram na página do ambiente)",
                                  key=f"fotos{sid}", type=["jpg", "jpeg", "png"],
                                  accept_multiple_files=True)
         ambientes.append({"nome": nome, "desc": desc, "valor": valor,
                           "parcela": parcela if parcela > 0 else None,
-                          "fotos_raw": fotos[:2] if fotos else []})
+                          "fotos_raw": fotos[:4] if fotos else []})
 
 # total ao vivo
 _total = sum(a["valor"] for a in ambientes if a["valor"])
@@ -208,6 +208,9 @@ def _valida():
             er.append(f"Ambiente {k + 1:02d} está sem valor.")
         if not a["fotos_raw"]:
             av.append(f"Ambiente {k + 1:02d} está sem foto — a página sai só com texto e valor.")
+        elif len(st.session_state.get(f"fotos{st.session_state.slots[k]}") or []) > 4:
+            av.append(f"Ambiente {k + 1:02d}: só as 4 primeiras fotos entram no PDF. "
+                      f"As demais são ignoradas.")
         if not a["desc"].strip():
             av.append(f"Ambiente {k + 1:02d} está sem descrição.")
         if not a["parcela"]:
