@@ -144,7 +144,6 @@ def gerar(dados, saida):
         ('Eng. Kethelyn', '@legus.engenharia', 'arq_1.jpg'),
         ('Eduardo Felipe', '@aha_arquitetura', 'arq_eduardo.jpg'),
         ('Jornate Obras', '@jornateobras', 'arq_2.jpg'),
-        ('Carol Cunha', '@carolcunha.designinealmeida.ca', 'arq_0.jpg'),
     ]
     # so entra quem tem a foto de fato no disco (evita quebrar a geracao)
     ARQUITETOS = [t for t in _ARQ_ORDEM if os.path.exists(AS + t[2])]
@@ -497,15 +496,33 @@ def gerar(dados, saida):
     fecha(c, escuro=True)
 
     # ============================ AMBIENTES ============================
-    def render_h(c, path, x, y, boxw, boxh, key):
-        """Render horizontal completo, sem recorte, sobre painel em arco."""
+    def prep_h(path, x, y, boxw, boxh, key):
+        """Calcula imagem e arco de fundo SEM desenhar.
+
+        O arco fica preso a celula (x, y, boxw, boxh) da propria foto. Sem esse
+        limite ele transbordava 18pt acima da imagem, num vao de 14pt, e entrava
+        na foto vizinha.
+        """
         f, w, h = contain(path, boxw, boxh, key)
-        ix = x + (boxw - w) / 2
-        iy = y + (boxh - h) / 2
-        arco(c, ix - 13, iy - 12, w + 26, h + 30)
-        c.drawImage(f, ix, iy, w, h)
-        fio(c, ix, ix + w, iy - 6, LINE, 0.5)
-        return w, h
+        ix = x + (boxw - w) / 2.0
+        iy = y + (boxh - h) / 2.0
+        ax0 = max(x, ix - 13);          ax1 = min(x + boxw, ix + w + 13)
+        ay0 = max(y, iy - 12);          ay1 = min(y + boxh, iy + h + 18)
+        return {'f': f, 'ix': ix, 'iy': iy, 'w': w, 'h': h,
+                'ax': ax0, 'ay': ay0, 'aw': ax1 - ax0, 'ah': ay1 - ay0}
+
+
+    def desenha_h(c, itens):
+        """Desenha TODOS os arcos e so depois TODAS as imagens.
+
+        A ordem importa: antes era arco1, img1, arco2, img2... e o arco de uma
+        foto era pintado por cima da imagem da anterior.
+        """
+        for it in itens:
+            arco(c, it['ax'], it['ay'], it['aw'], it['ah'])
+        for it in itens:
+            c.drawImage(it['f'], it['ix'], it['iy'], it['w'], it['h'])
+            fio(c, it['ix'], it['ix'] + it['w'], it['iy'] - 6, LINE, 0.5)
 
 
     for n, nome, val, parc, desc, fotos in AMBIENTES:
@@ -518,33 +535,36 @@ def gerar(dados, saida):
         # Todas as fotos enviadas entram NESTA pagina (a que leva o preco).
         # A 1a foto do 1o ambiente tambem e reaproveitada como fundo da capa e
         # da pag. 6 — reaproveitamento, nunca substituicao.
-        gap = 14.0
-        hw = (CW - gap) / 2          # meia largura
+        gap = 20.0                    # > 18pt do transbordo do arco
+        hw = (CW - gap) / 2           # meia largura
+        itens = []
         if not fotos:
             y = y - 20
         elif len(fotos) == 1:
-            render_h(c, fotos[0], TX, y - 300, CW, 300, f'r{n}_0')
+            itens.append(prep_h(fotos[0], TX, y - 300, CW, 300, f'r{n}_0'))
             y = y - 300 - 32
         elif len(fotos) == 2:
-            bh = 214.0
-            render_h(c, fotos[0], TX, y - bh, CW, bh, f'r{n}_0')
-            render_h(c, fotos[1], TX, y - 2 * bh - gap, CW, bh, f'r{n}_1')
+            bh = 210.0
+            itens.append(prep_h(fotos[0], TX, y - bh, CW, bh, f'r{n}_0'))
+            itens.append(prep_h(fotos[1], TX, y - 2 * bh - gap, CW, bh, f'r{n}_1'))
             y = y - 2 * bh - gap - 28
         elif len(fotos) == 3:
-            # 1 larga em cima + 2 lado a lado embaixo (mesma altura total de 2 fotos)
-            bh1, bh2 = 240.0, 188.0
-            render_h(c, fotos[0], TX, y - bh1, CW, bh1, f'r{n}_0')
-            render_h(c, fotos[1], TX, y - bh1 - gap - bh2, hw, bh2, f'r{n}_1')
-            render_h(c, fotos[2], TX + hw + gap, y - bh1 - gap - bh2, hw, bh2, f'r{n}_2')
+            # 1 larga em cima + 2 lado a lado embaixo
+            bh1, bh2 = 236.0, 184.0
+            itens.append(prep_h(fotos[0], TX, y - bh1, CW, bh1, f'r{n}_0'))
+            itens.append(prep_h(fotos[1], TX, y - bh1 - gap - bh2, hw, bh2, f'r{n}_1'))
+            itens.append(prep_h(fotos[2], TX + hw + gap, y - bh1 - gap - bh2, hw, bh2,
+                                f'r{n}_2'))
             y = y - bh1 - gap - bh2 - 28
         else:
             # 4 fotos: grade 2x2
-            bh = 214.0
+            bh = 210.0
             for _k in range(4):
                 _cx = TX + (_k % 2) * (hw + gap)
                 _cy = y - (_k // 2 + 1) * bh - (_k // 2) * gap
-                render_h(c, fotos[_k], _cx, _cy, hw, bh, f'r{n}_{_k}')
+                itens.append(prep_h(fotos[_k], _cx, _cy, hw, bh, f'r{n}_{_k}'))
             y = y - 2 * bh - gap - 28
+        desenha_h(c, itens)
 
         fio(c, TX, W - RM, y + 4, LINE, 0.5)
         tracked(c, 'INVESTIMENTO DO AMBIENTE', TX, y - 22, 'PopM', 7, 3, BRONZE)
@@ -642,14 +662,36 @@ def gerar(dados, saida):
         y = yy - 26
 
     y -= 4
-    arco(c, TX, y - 152, CW, 152, CREAM)
+    _ah = 150.0
+    arco(c, TX, y - _ah, CW, _ah, CREAM)
     c.setFont('LoraIt', 15)
     c.setFillColorRGB(*CHAR)
     c.drawCentredString(TX + CW / 2, y - 52, 'Cuidados com a sua obra')
     para(c, 'Respeitamos o seu investimento. Toda etapa da obra é acompanhada pelo nosso líder de '
             'pós-venda, e existe a preparação de todo o ambiente para receber o material — para que '
-            'seja uma obra limpa e tranquila.',
+            'seja uma obra limpa e tranquila. Utilizamos um processo de acompanhamento de vistorias '
+            'com o nosso supervisor de obras, por meio de um sistema de vistorias online, que traz '
+            'agilidade e documentação de toda a montagem.',
          TX + 44, y - 78, 'PopL', 8.4, 13, CW - 88)
+
+    # duas fotos abaixo do texto: salva-piso e vistoria no tablet.
+    # A largura de cada uma sai da propria proporcao, com altura igual, para as
+    # duas preencherem a caixa (uma e retrato e a outra paisagem).
+    _fh = 120.0
+    _obras = [(AS + 'obra_salvapiso.jpg', 'obr1'), (AS + 'obra_vistoria.jpg', 'obr2')]
+    _prep = []
+    for _cam, _k in _obras:
+        if os.path.exists(_cam):
+            _prep.append(contain(_cam, CW, _fh, _k))
+    if _prep:
+        _gap = 16.0
+        _tot = sum(it[1] for it in _prep) + _gap * (len(_prep) - 1)
+        _x = TX + (CW - _tot) / 2.0
+        _ytop = y - _ah - 24
+        for _f, _w, _h in _prep:
+            arco(c, _x - 10, _ytop - _h - 8, _w + 20, _h + 24, CREAM)
+            c.drawImage(_f, _x, _ytop - _h, _w, _h)
+            _x += _w + _gap
     fecha(c)
 
     # ============================ EMPRESAS PARCEIRAS ============================
@@ -759,8 +801,8 @@ def gerar(dados, saida):
 
     # ---------------------------- ARQUITETOS ----------------------------
     def grade_arq(c, y):
-        """Grade da rede em 4 colunas (foto ~3,5 cm). Ate 12 pessoas cabem."""
-        cols = 4
+        """Grade da rede em 5 colunas (foto ~2,6 cm), na mesma pagina do destaque."""
+        cols = 5
         gap = 18.0
         fw = (CW - gap * (cols - 1)) / cols
         for i, (nome, arroba, _fimg) in enumerate(ARQUITETOS):
@@ -817,21 +859,16 @@ def gerar(dados, saida):
             c.setFont('PopL', 9)
             c.setFillColorRGB(*BRONZE)
             c.drawString(tx2, y - 61, _insta)
-        para(c, 'A assinatura por trás deste projeto. É da visão do arquiteto ' + _primeiro +
+        # frase sem genero: a lista tem homens e mulheres, e antes saia
+        # "do arquiteto Karin", "do arquiteto Luana"...
+        para(c, 'A assinatura por trás deste projeto. É da visão de ' + _primeiro +
                 ' que nasce cada ambiente desta proposta — e é com profissionais assim que a '
                 'D’Coratto constrói seus melhores trabalhos.',
              tx2, y - 84, 'PopL', 8.4, 13, W - RM - tx2, MID)
         fio(c, TX, W - RM, y - dh - 22, LINE, 0.5)
-        y = y - dh - 44
+        y = y - dh - 52
 
-        fecha(c)
-
-        # ---- pagina dedicada: a rede completa ----
-        c.setFillColorRGB(*WHITE)
-        c.rect(0, 0, W, H, fill=1, stroke=0)
-        y = cabeca(c, 'REDE D’CORATTO', 'Arquitetos', 'e engenheiros')
-        y = para(c, 'Profissionais que especificam D’Coratto nos seus projetos.',
-                 TX, y + 10, 'PopL', 9, 14, CW, GREY) - 34
+        # a rede completa entra na MESMA pagina, logo abaixo do destaque
         grade_arq(c, y)
         fecha(c)
     else:
