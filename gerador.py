@@ -262,8 +262,13 @@ def gerar(dados, saida):
 
 
     def arco(c, x, y, w, h, cor=CREAM):
-        """Painel em arco (topo semicircular) usado como fundo — nunca corta imagem."""
-        r = w / 2.0
+        """Painel em arco (topo abaulado) usado como fundo — nunca corta imagem.
+
+        O raio e limitado a altura. Sem esse limite, um painel mais baixo que w/2
+        fazia o caminho passar ABAIXO do ponto inicial e a forma se autointersectava,
+        produzindo uma cunha branca torta atravessando o bege.
+        """
+        r = min(w / 2.0, h)
         p = c.beginPath()
         p.moveTo(x, y)
         p.lineTo(x, y + h - r)
@@ -674,23 +679,23 @@ def gerar(dados, saida):
             'agilidade e documentação de toda a montagem.',
          TX + 44, y - 78, 'PopL', 8.4, 13, CW - 88)
 
-    # duas fotos abaixo do texto: salva-piso e vistoria no tablet.
-    # A largura de cada uma sai da propria proporcao, com altura igual, para as
-    # duas preencherem a caixa (uma e retrato e a outra paisagem).
-    _fh = 120.0
+    # Duas fotos abaixo do texto: salva-piso e vistoria no tablet.
+    # Ficam sobre UM painel unico, centralizado no mesmo eixo do bloco de texto,
+    # para lerem como uma composicao so — antes cada foto tinha o proprio arco e
+    # os tres se misturavam.
+    _fh = 118.0
     _obras = [(AS + 'obra_salvapiso.jpg', 'obr1'), (AS + 'obra_vistoria.jpg', 'obr2')]
-    _prep = []
-    for _cam, _k in _obras:
-        if os.path.exists(_cam):
-            _prep.append(contain(_cam, CW, _fh, _k))
+    _prep = [contain(_c, CW, _fh, _k) for _c, _k in _obras if os.path.exists(_c)]
     if _prep:
-        _gap = 16.0
+        _gap = 18.0
         _tot = sum(it[1] for it in _prep) + _gap * (len(_prep) - 1)
-        _x = TX + (CW - _tot) / 2.0
+        _x0 = TX + (CW - _tot) / 2.0
         _ytop = y - _ah - 24
+        _base = _ytop - _fh
+        arco(c, _x0 - 16, _base - 12, _tot + 32, _fh + 32, CREAM)
+        _x = _x0
         for _f, _w, _h in _prep:
-            arco(c, _x - 10, _ytop - _h - 8, _w + 20, _h + 24, CREAM)
-            c.drawImage(_f, _x, _ytop - _h, _w, _h)
+            c.drawImage(_f, _x, _base + (_fh - _h) / 2.0, _w, _h)
             _x += _w + _gap
     fecha(c)
 
