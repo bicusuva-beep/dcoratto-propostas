@@ -35,26 +35,19 @@ def _carrega_arquitetos():
 ARQ_SALVOS = _carrega_arquitetos()
 
 
-def _carrega_materiais():
-    """Catalogo de acabamentos (materiais.json). Devolve lista achatada
-    'Nome (substrato) — Fornecedor' para o multiselect."""
-    for base in (_BASE, _dir_assets()):
-        f = os.path.join(base, "materiais.json")
-        if os.path.exists(f):
-            try:
-                with open(f, encoding="utf-8") as fh:
-                    d = json.load(fh)
-                out = []
-                for g in d.get("grupos", []):
-                    for it in g.get("itens", []):
-                        out.append(f'{it} — {g["nome"]}')
-                return out
-            except Exception:
-                return []
-    return []
 
+def _nome_arquivo(cliente, proposta=""):
+    """Nome de arquivo a prova de navegador: sem acento e sem espaco.
 
-MATERIAIS = _carrega_materiais()
+    Acento e espaco no cabecalho de download sao truncados ou renomeados por
+    alguns navegadores — era por isso que o PDF saia sem o nome do cliente.
+    """
+    import unicodedata
+    base = unicodedata.normalize("NFKD", cliente or "").encode("ascii", "ignore").decode()
+    base = "".join(ch if (ch.isalnum() or ch in " -_") else "" for ch in base)
+    base = "_".join(base.split()) or "Cliente"
+    num = "".join(ch for ch in (proposta or "") if ch.isalnum() or ch == "-")
+    return f"Proposta_{base}{'_' + num if num else ''}.pdf"
 
 
 def _br(v):
@@ -117,12 +110,6 @@ n_parcelas = st.number_input("Parcelar em até quantas vezes", min_value=1, max_
                              value=12, step=1,
                              help="Usado nas linhas 'ou Nx de R$ ...' do PDF.")
 
-materiais_sel = []
-if MATERIAIS:
-    materiais_sel = st.multiselect(
-        "Acabamentos do projeto (até 10)", MATERIAIS, max_selections=10,
-        help="Digite para filtrar. Saem na página de paleta e atmosfera, "
-             "logo depois do divisor do projeto.")
 
 # ------------------------------------------------------------------ ambientes
 st.markdown('<div class="dco-kicker">Ambientes</div>', unsafe_allow_html=True)
@@ -363,7 +350,6 @@ if st.button("Gerar proposta em PDF", type="primary"):
                 "validade": validade.strip() or "10 dias",
                 "pagamento": pagamento.strip(),
                 "parcelas": int(n_parcelas),
-                "materiais": materiais_sel,
                 "ambientes": amb_final,
                 "arquiteto": arq_final,
             }
@@ -374,6 +360,6 @@ if st.button("Gerar proposta em PDF", type="primary"):
                 pdf_bytes = f.read()
 
         st.success("Proposta gerada.")
-        nome_arq = "Proposta " + "".join(ch for ch in cliente if ch.isalnum() or ch in " -").strip() + ".pdf"
+        nome_arq = _nome_arquivo(cliente, proposta)
         st.download_button("⬇ Baixar PDF", data=pdf_bytes, file_name=nome_arq,
                            mime="application/pdf")
