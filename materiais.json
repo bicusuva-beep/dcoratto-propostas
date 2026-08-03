@@ -1,0 +1,85 @@
+{
+  "_leia": "Catalogo de acabamentos. Transcrito da tabela '50 PADROES DE CORES' da D'Coratto. Para incluir ou corrigir, edite este arquivo — o app le a lista daqui.",
+  "grupos": [
+    {
+      "nome": "Arauco",
+      "itens": [
+        "Branco Supremo (MDP)",
+        "Beton Matt (MDP)",
+        "Beige (MDP)",
+        "Canela (MDP)",
+        "Carvalho (MDP)",
+        "Grafito (MDP)",
+        "Jalapão (MDP)",
+        "Lord (MDP)",
+        "Nogueira Pecan (MDP)"
+      ]
+    },
+    {
+      "nome": "Berneck",
+      "itens": [
+        "Amantea (MDP)",
+        "Branco (MDF/MDP)",
+        "Cinamomo (MDP)",
+        "Louro Freijó (MDP)",
+        "Louro Preto (MDP)",
+        "Macadâmia (MDP)",
+        "Millennial (MDP)",
+        "Nude Vel (MDP)",
+        "Ópera Vel (MDP)",
+        "Plomo (MDP)",
+        "Preto (MDP)",
+        "Sky (MDP)",
+        "Verti (MDP)"
+      ]
+    },
+    {
+      "nome": "Duratex",
+      "itens": [
+        "Absoluto (MDF)",
+        "Branco Diamante (MDF)",
+        "Cinza Sagrado (MDF)",
+        "Cinza Sagrado Essencial (MDP)",
+        "Gianduia (MDF)",
+        "Gianduia Puro (MDP)",
+        "Lana (MDP)",
+        "Mint (MDP)",
+        "Ocre Solar (MDP)",
+        "Off White (MDP)",
+        "Pau Ferro Cristalo (MDF)",
+        "Preto Acetinatto (MDF)",
+        "Preto Diamante (MDF)",
+        "Rovere Sereno (MDP)",
+        "Titânio (MDF)",
+        "Verde Floresta (MDP)"
+      ]
+    },
+    {
+      "nome": "Guararapes",
+      "itens": [
+        "Capuccino (MDF)",
+        "Curupixá (MDF)",
+        "Fontana (MDF)",
+        "Marmo (MDF)",
+        "Quartzo (MDF)",
+        "Rosa Milkshake (MDF)"
+      ]
+    },
+    {
+      "nome": "Green Plac",
+      "itens": [
+        "Veredas (MDF)"
+      ]
+    },
+    {
+      "nome": "Lâminas naturais",
+      "itens": [
+        "Carvalho Catedral",
+        "Freijó Catedral",
+        "Jequitibá Natural",
+        "Nogueira Americana",
+        "Pau Ferro"
+      ]
+    }
+  ]
+}

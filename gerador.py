@@ -65,6 +65,7 @@ def gerar(dados, saida):
     VALIDADE = dados.get('validade') or '10 dias'
     PAGAMENTO = dados.get('pagamento') or ''
     NPARC = int(dados.get('parcelas') or 12)
+    MATERIAIS_SEL = list(dados.get('materiais') or [])
     PRAZO = dados.get('prazo') or ''
     CONTATO = ''
 
@@ -206,6 +207,91 @@ def gerar(dados, saida):
             c.drawString(x, y, ln)
             y -= lead
         return y
+
+
+    # ---------------------------- MOODBOARD ----------------------------
+    def _mosaico(caminhos, lado=120):
+        """Junta os renders num quadro unico para analisar o projeto inteiro.
+
+        Todos vao para o mesmo tamanho: se colasse em tamanhos diferentes, a
+        borda branca de sobra entraria na paleta como se fosse cor do projeto.
+        """
+        quadros = [Image.open(cm).convert('RGB').resize((lado, lado))
+                   for cm in caminhos]
+        m = Image.new('RGB', (lado, lado * len(quadros)))
+        for i, q in enumerate(quadros):
+            m.paste(q, (0, i * lado))
+        return m
+
+
+    def paleta_projeto(caminhos, n=5):
+        """Cores dominantes e o peso de cada uma, pelo quantizador do Pillow.
+
+        Comparei com k-means: distancia media de 16 a 28 numa escala de 0 a 441,
+        imperceptivel. Nao vale instalar scikit-learn por isso.
+        """
+        m = _mosaico(caminhos)
+        qz = m.quantize(colors=n, method=Image.FASTOCTREE)
+        pal = qz.getpalette()[:n * 3]
+        cores = [tuple(pal[i * 3:i * 3 + 3]) for i in range(n)]
+        cont = sorted(qz.getcolors() or [], reverse=True)
+        tot = sum(q for q, _ in cont) or 1
+        return [(cores[i], q / tot) for q, i in cont]
+
+
+    def atmosfera(caminhos):
+        """Tres eixos medidos: luminosidade, presenca de cor e temperatura."""
+        from PIL import ImageStat
+        m = _mosaico(caminhos)
+        r, g, b = ImageStat.Stat(m).mean
+        lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
+        sat = ImageStat.Stat(m.convert('HSV')).mean[1]
+        temp = r - b
+        eixo_l = 'Escura' if lum < 95 else ('Clara' if lum > 150 else 'Meio-tom')
+        eixo_c = 'Neutra' if sat < 45 else ('Presente' if sat > 90 else 'Discreta')
+        eixo_t = 'Fria' if temp < -4 else ('Quente' if temp > 8 else 'Equilibrada')
+        return [('Luminosidade', eixo_l), ('Cor', eixo_c), ('Temperatura', eixo_t)]
+
+
+    _grades = {}
+
+    def _grade(caminhos, g=6):
+        """Media de cor de cada celula, por render. Calcula UMA vez e reusa —
+        antes cada render era reaberto uma vez por cor da paleta."""
+        chave = tuple(caminhos)
+        if chave not in _grades:
+            tudo = []
+            for cm in caminhos:
+                im = Image.open(cm).convert('RGB')
+                mini = im.resize((g, g))
+                cw, ch = im.width / g, im.height / g
+                for gx in range(g):
+                    for gy in range(g):
+                        tudo.append((mini.getpixel((gx, gy)), im,
+                                     gx * cw, gy * ch, cw, ch))
+            _grades[chave] = tudo
+        return _grades[chave]
+
+
+    def recorte_da_cor(caminhos, cor, px=260):
+        """Recorta o pedaco do render que mais se parece com a cor dada.
+
+        Assim a amostra de textura vem do projeto, nao de um degrade inventado.
+        """
+        alvo, menor = None, None
+        for media, im, x, yy, cw, ch in _grade(caminhos):
+            d = sum((a - b) ** 2 for a, b in zip(media, cor))
+            if menor is None or d < menor:
+                menor, alvo = d, (im, x, yy, cw, ch)
+        if alvo is None:
+            return None
+        im, x0, y0, w0, h0 = alvo
+        lado = min(w0, h0)
+        cx, cy = x0 + w0 / 2, y0 + h0 / 2
+        cai = im.crop((int(max(0, cx - lado / 2)), int(max(0, cy - lado / 2)),
+                       int(min(im.width, cx + lado / 2)),
+                       int(min(im.height, cy + lado / 2))))
+        return ImageReader(cai.resize((px, px)))
 
 
     def tracked(c, text, x, y, font, size, track, color=CHAR):
@@ -499,6 +585,79 @@ def gerar(dados, saida):
         fio(c, TX, W - RM, y - 16, (0.5, 0.5, 0.52), 0.6)
         y -= 46
     fecha(c, escuro=True)
+
+    # ============================ MOODBOARD ============================
+    # Entra logo depois do divisor. Sem render nao ha o que analisar: a pagina
+    # simplesmente nao e criada e o documento fica com uma pagina menos.
+    _fotos_todas = [f for a in AMBIENTES for f in a[5]]
+    if _fotos_todas:
+        c.setFillColorRGB(*WHITE)
+        c.rect(0, 0, W, H, fill=1, stroke=0)
+        y = cabeca(c, 'O PROJETO', 'Paleta', 'e atmosfera')
+
+        _pal = paleta_projeto(_fotos_todas, 5)
+        _atm = atmosfera(_fotos_todas)
+        _frase = ('Paleta e atmosfera extraidas dos renders deste projeto. '
+                  + ' · '.join(f'{k}: {v.lower()}' for k, v in _atm) + '.')
+        y = para(c, _frase.replace('extraidas', 'extraídas'),
+                 TX, y + 10, 'PopL', 9, 14, CW, GREY) - 34
+
+        # ---- centraliza o bloco entre o cabecalho e o rodape ----
+        # Sem isso o conteudo ficava colado no topo e sobravam ~200pt de vazio
+        # embaixo, com a pagina visivelmente torta.
+        _gap = 12.0
+        _sw = (CW - _gap * 4) / 5
+        _linhas_mat = (len(MATERIAIS_SEL[:10]) + 1) // 2 if MATERIAIS_SEL else 0
+        _alt_bloco = (16 + _sw + 46) * 2 + (20 + _linhas_mat * 15 + 10 if _linhas_mat else 0)
+        y -= max(0.0, (y - 96.0 - _alt_bloco) / 2.0)
+
+        # ---- faixa 1: as cores dominantes ----
+        tracked(c, 'CORES DOMINANTES', TX, y, 'PopM', 7, 3, BRONZE)
+        y -= 16
+        for i, (cor, peso) in enumerate(_pal[:5]):
+            _x = TX + i * (_sw + _gap)
+            c.setFillColorRGB(cor[0] / 255.0, cor[1] / 255.0, cor[2] / 255.0)
+            c.rect(_x, y - _sw, _sw, _sw, fill=1, stroke=0)
+            c.setFont('PopM', 7)
+            c.setFillColorRGB(*CHAR)
+            c.drawString(_x, y - _sw - 13, '#%02X%02X%02X' % cor)
+            c.setFont('PopL', 6.6)
+            c.setFillColorRGB(*GREY)
+            c.drawString(_x, y - _sw - 23, f'{round(peso * 100)}%')
+        y -= _sw + 46
+
+        # ---- faixa 2: o mesmo tom, agora como textura do proprio render ----
+        tracked(c, 'AMOSTRAS DO PROJETO', TX, y, 'PopM', 7, 3, BRONZE)
+        y -= 16
+        for i, (cor, _peso) in enumerate(_pal[:5]):
+            _img = recorte_da_cor(_fotos_todas, cor)
+            if _img is None:
+                continue
+            _x = TX + i * (_sw + _gap)
+            c.drawImage(_img, _x, y - _sw, _sw, _sw)
+        y -= _sw + 46
+
+        # ---- acabamentos escolhidos no formulario ----
+        if MATERIAIS_SEL:
+            tracked(c, 'ACABAMENTOS DO PROJETO', TX, y, 'PopM', 7, 3, BRONZE)
+            y -= 20
+            _colw = CW / 2
+            for i, _mat in enumerate(MATERIAIS_SEL[:10]):
+                _cx = TX + (i % 2) * _colw
+                _cy = y - (i // 2) * 15
+                c.setFillColorRGB(*BRONZE)
+                c.circle(_cx + 2, _cy + 3, 1.6, fill=1, stroke=0)
+                c.setFont('PopL', 8.4)
+                c.setFillColorRGB(*MID)
+                c.drawString(_cx + 10, _cy, _mat)
+            y -= ((len(MATERIAIS_SEL[:10]) + 1) // 2) * 15 + 10
+
+        # nota de rodape: a paleta vem dos renders, nao dos acabamentos da lista
+        c.setFont('PopL', 6)
+        c.setFillColorRGB(*GREY)
+        c.drawString(TX, 96, 'Paleta e amostras extraídas dos renders deste projeto. '
+                             'Os acabamentos listados são os especificados para execução.')
+        fecha(c)
 
     # ============================ AMBIENTES ============================
     def prep_h(path, x, y, boxw, boxh, key):

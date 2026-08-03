@@ -35,6 +35,28 @@ def _carrega_arquitetos():
 ARQ_SALVOS = _carrega_arquitetos()
 
 
+def _carrega_materiais():
+    """Catalogo de acabamentos (materiais.json). Devolve lista achatada
+    'Nome (substrato) — Fornecedor' para o multiselect."""
+    for base in (_BASE, _dir_assets()):
+        f = os.path.join(base, "materiais.json")
+        if os.path.exists(f):
+            try:
+                with open(f, encoding="utf-8") as fh:
+                    d = json.load(fh)
+                out = []
+                for g in d.get("grupos", []):
+                    for it in g.get("itens", []):
+                        out.append(f'{it} — {g["nome"]}')
+                return out
+            except Exception:
+                return []
+    return []
+
+
+MATERIAIS = _carrega_materiais()
+
+
 def _br(v):
     """Formata numero no padrao brasileiro: 46489.81 -> 46.489,81"""
     return f"{v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -94,6 +116,13 @@ pagamento = c4.text_input("Forma de pagamento (opcional)",
 n_parcelas = st.number_input("Parcelar em até quantas vezes", min_value=1, max_value=48,
                              value=12, step=1,
                              help="Usado nas linhas 'ou Nx de R$ ...' do PDF.")
+
+materiais_sel = []
+if MATERIAIS:
+    materiais_sel = st.multiselect(
+        "Acabamentos do projeto (até 10)", MATERIAIS, max_selections=10,
+        help="Digite para filtrar. Saem na página de paleta e atmosfera, "
+             "logo depois do divisor do projeto.")
 
 # ------------------------------------------------------------------ ambientes
 st.markdown('<div class="dco-kicker">Ambientes</div>', unsafe_allow_html=True)
@@ -334,6 +363,7 @@ if st.button("Gerar proposta em PDF", type="primary"):
                 "validade": validade.strip() or "10 dias",
                 "pagamento": pagamento.strip(),
                 "parcelas": int(n_parcelas),
+                "materiais": materiais_sel,
                 "ambientes": amb_final,
                 "arquiteto": arq_final,
             }
