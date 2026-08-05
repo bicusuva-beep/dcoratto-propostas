@@ -189,17 +189,26 @@ if modo == "Escolher da lista":
         c_a.warning("Sem foto")
     c_b.markdown(f"**{_reg['nome']}**")
     c_b.caption(_reg.get("insta", "") or "sem @")
+    _exc = st.checkbox("Mostrar apenas este arquiteto na proposta",
+                       key="exc_lista",
+                       help="Marque quando o arquiteto não quiser os demais na página.")
     arq = {"tipo": "novo", "nome": _reg["nome"],
-           "insta": _reg.get("insta", ""), "foto_path": _fp}
-    st.caption("O arquiteto aparece com destaque como autor do projeto.")
+           "insta": _reg.get("insta", ""), "foto_path": _fp, "exclusivo": _exc}
+    st.caption("O arquiteto aparece com destaque como autor do projeto."
+               + (" A rede de parceiros não entra." if _exc else ""))
 
 elif modo == "Cadastrar novo":
     a1, a2 = st.columns(2)
     arq_nome = a1.text_input("Nome do arquiteto", placeholder="ex.: Arquiteto Diego")
     arq_insta = a2.text_input("Instagram", placeholder="@exemplararquitetura")
     arq_foto = st.file_uploader("Foto do arquiteto", type=["jpg", "jpeg", "png"], key="arqfoto")
-    arq = {"tipo": "novo", "nome": arq_nome, "insta": arq_insta, "foto_raw": arq_foto}
-    st.caption("O arquiteto aparece com destaque como autor do projeto.")
+    _exc = st.checkbox("Mostrar apenas este arquiteto na proposta",
+                       key="exc_novo",
+                       help="Marque quando o arquiteto não quiser os demais na página.")
+    arq = {"tipo": "novo", "nome": arq_nome, "insta": arq_insta,
+           "foto_raw": arq_foto, "exclusivo": _exc}
+    st.caption("O arquiteto aparece com destaque como autor do projeto."
+               + (" A rede de parceiros não entra." if _exc else ""))
     if arq_nome.strip():
         with st.expander("Para este arquiteto aparecer na lista nas próximas vezes"):
             st.write("O app não guarda cadastro sozinho (o servidor reinicia e apaga). "
@@ -341,7 +350,8 @@ if st.button("Gerar proposta em PDF", type="primary"):
                         out.write(arq["foto_raw"].getbuffer())
                 if arq.get("nome") or foto_path:
                     arq_final = {"tipo": "novo", "nome": arq.get("nome", ""),
-                                 "insta": arq.get("insta", ""), "foto": foto_path}
+                                 "insta": arq.get("insta", ""), "foto": foto_path,
+                                 "exclusivo": bool(arq.get("exclusivo"))}
 
             dados = {
                 "cliente": cliente.strip(),
