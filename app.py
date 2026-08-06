@@ -95,7 +95,7 @@ USUARIO = {"nome": "Equipe D'Coratto", "email": "equipe", "admin": True}
 with st.sidebar:
     SECAO = st.radio("Menu", ["Nova proposta", "Propostas salvas",
                               "Painel comercial", "Monitoramento"],
-                     label_visibility="collapsed")
+                     key="_secao", label_visibility="collapsed")
     st.divider()
     st.caption(f"Dados em: {dados.qual_backend()}")
 
@@ -579,6 +579,7 @@ elif SECAO == "Propostas salvas":
                 st.rerun()
             if c4.button("Abrir", key=f"ab{p['id']}"):
                 st.session_state["_abrir"] = p["id"]
+                st.session_state["_secao"] = "Nova proposta"
                 st.session_state.pop("_pronta", None)
                 st.rerun()
 
