@@ -75,8 +75,13 @@ def gerar(dados, saida):
                           (float(a['parcela']) if a.get('parcela') else None),
                           a.get('desc', ''), list(a.get('fotos', []))))
     TOTAL = sum(a[2] for a in AMBIENTES)
+    # Parcela do total. A equipe costuma informar o parcelamento so no valor
+    # final — antes eu exigia parcela em TODOS os ambientes e, faltando uma, a
+    # linha "ou Nx de" sumia inteira.
     _parcs = [a[3] for a in AMBIENTES]
-    TOTAL_PARC = sum(_parcs) if (_parcs and all(p for p in _parcs)) else None
+    TOTAL_PARC = dados.get('parcela_total') or None
+    if not TOTAL_PARC and _parcs and all(p for p in _parcs):
+        TOTAL_PARC = sum(_parcs)
 
     ARQ = dados.get('arquiteto') or {'tipo': 'nenhum'}
     # arquiteto pediu exclusividade: a grade da rede nao entra
@@ -248,17 +253,45 @@ def gerar(dados, saida):
         c.drawRightString(x, y, texto)
 
 
-    def cabeca(c, kicker, titulo, italico=None, y=H - 118):
-        """Titulo editorial: numeral fantasma + titulo + fio curto."""
+    def _ajusta_titulo(txt, fonte, tam, maxw, min_tam=15.0, max_linhas=2):
+        """Devolve (linhas, tamanho) que cabem em maxw.
+
+        Antes o titulo era desenhado em tamanho fixo e o que passava da coluna
+        era simplesmente cortado na borda da pagina — nomes longos de ambiente
+        saiam pela metade. Aqui ele primeiro quebra em ate duas linhas e, se
+        ainda nao couber, reduz a fonte ate caber.
+        """
+        t = tam
+        while t >= min_tam:
+            linhas = wrap(txt, fonte, t, maxw)
+            if len(linhas) <= max_linhas and all(
+                    pdfmetrics.stringWidth(l, fonte, t) <= maxw for l in linhas):
+                return linhas, t
+            t -= 0.5
+        linhas = wrap(txt, fonte, min_tam, maxw)[:max_linhas]
+        return linhas, min_tam
+
+
+    def cabeca(c, kicker, titulo, italico=None, y=H - 118, maxw=None):
+        """Titulo editorial: numeral fantasma + titulo + fio curto.
+
+        O titulo se adapta: quebra de linha primeiro, reducao de corpo depois.
+        """
         marginalia(c, kicker)
-        c.setFont('Lora', 27)
+        larg = maxw if maxw else CW
+        linhas, tam = _ajusta_titulo(titulo, 'Lora', 27, larg)
         c.setFillColorRGB(*CHAR)
-        c.drawString(TX, y, titulo)
+        c.setFont('Lora', tam)
+        for i, ln in enumerate(linhas):
+            c.drawString(TX, y - i * (tam * 1.18), ln)
+        y -= (len(linhas) - 1) * (tam * 1.18)
         if italico:
-            c.setFont('LoraIt', 27)
+            lin2, tam2 = _ajusta_titulo(italico, 'LoraIt', 27, larg)
             c.setFillColorRGB(*BRONZE)
-            c.drawString(TX, y - 32, italico)
-            y -= 32
+            c.setFont('LoraIt', tam2)
+            for i, ln in enumerate(lin2):
+                c.drawString(TX, y - 32 - i * (tam2 * 1.18), ln)
+            y -= 32 + (len(lin2) - 1) * (tam2 * 1.18)
         fio(c, TX, TX + 38, y - 18, BRONZE, 1.1)
         return y - 48
 
@@ -490,16 +523,34 @@ def gerar(dados, saida):
     para(c, 'Os ambientes são apresentados na mesma ordem em que serão vividos — do primeiro olhar '
             'ao entrar, à integração entre estar, jantar e cozinha.',
          TX, H - 252, 'PopL', 9.5, 15, 380, (0.88, 0.88, 0.89))
-    y = 300
+    # A lista pagina sozinha e o nome quebra: com muitos ambientes ela descia
+    # para fora da folha (com 17 itens o ultimo caia em y = -436).
+    _LIM_DIV = 108.0
+    _LARG_NOME = W - RM - (TX + 42)
+
+    def _abre_divisor():
+        c.drawImage(cover(_fundo, W, H, 'div', focus=0.4, darken=0.42), 0, 0, W, H)
+        tracked(c, 'O PROJETO · continuação', TX, H - 120, 'PopM', 8, 3.4,
+                (0.85, 0.72, 0.55))
+        return H - 168
+
+    y = 500
     for n, nome, val, _, _, _ in AMBIENTES:
+        _lin = wrap(nome, 'PopL', 14, _LARG_NOME)
+        _alt = 46 + (len(_lin) - 1) * 19
+        if y - _alt < _LIM_DIV:
+            fecha(c, escuro=True)
+            y = _abre_divisor()
         c.setFont('Lora', 19)
         c.setFillColorRGB(0.85, 0.72, 0.55)
         c.drawString(TX, y, n)
         c.setFont('PopL', 14)
         c.setFillColorRGB(*WHITE)
-        c.drawString(TX + 42, y, nome)
-        fio(c, TX, W - RM, y - 16, (0.5, 0.5, 0.52), 0.6)
-        y -= 46
+        for _i, _l in enumerate(_lin):
+            c.drawString(TX + 42, y - _i * 19, _l)
+        _base = y - (len(_lin) - 1) * 19
+        fio(c, TX, W - RM, _base - 16, (0.5, 0.5, 0.52), 0.6)
+        y = _base - 46
     fecha(c, escuro=True)
 
     # ============================ AMBIENTES ============================
@@ -536,8 +587,14 @@ def gerar(dados, saida):
         c.setFillColorRGB(*WHITE)
         c.rect(0, 0, W, H, fill=1, stroke=0)
         ghost(c, n, W - RM, H - 152)
-        y = cabeca(c, 'AMBIENTE ' + n, nome)
-        y = para(c, desc, TX, y + 10, 'PopL', 9.2, 15.5, CW) - 26
+        y = cabeca(c, 'AMBIENTE ' + n, nome, maxw=CW - 96)
+        # Descricao adaptativa: se for longa demais, encolhe o corpo em vez de
+        # empurrar fotos e preco para fora da folha.
+        _td, _ld = 9.2, 15.5
+        while _td > 7.0 and len(wrap(desc, 'PopL', _td, CW)) * _ld > 132:
+            _td -= 0.3
+            _ld = _td * 1.68
+        y = para(c, desc, TX, y + 10, 'PopL', _td, _ld, CW) - 26
 
         # Todas as fotos enviadas entram NESTA pagina (a que leva o preco).
         # A 1a foto do 1o ambiente tambem e reaproveitada como fundo da capa e
@@ -545,19 +602,27 @@ def gerar(dados, saida):
         gap = 20.0                    # > 18pt do transbordo do arco
         hw = (CW - gap) / 2           # meia largura
         itens = []
+        # As fotos ocupam o que sobrou entre a descricao e o bloco de preco.
+        # Sem esse calculo, uma descricao longa jogava o preco para fora da folha.
+        _ALT_PRECO = 78.0
+        _LIM_PG = 96.0
+        _disp = max(120.0, y - _LIM_PG - _ALT_PRECO)
+        _nec = {0: 0.0, 1: 300.0, 2: 440.0, 3: 440.0}.get(len(fotos), 440.0)
+        _k = min(1.0, (_disp / _nec) if _nec else 1.0)
         if not fotos:
             y = y - 20
         elif len(fotos) == 1:
-            itens.append(prep_h(fotos[0], TX, y - 300, CW, 300, f'r{n}_0'))
-            y = y - 300 - 32
+            bh = 300.0 * _k
+            itens.append(prep_h(fotos[0], TX, y - bh, CW, bh, f'r{n}_0'))
+            y = y - bh - 32
         elif len(fotos) == 2:
-            bh = 210.0
+            bh = 210.0 * _k
             itens.append(prep_h(fotos[0], TX, y - bh, CW, bh, f'r{n}_0'))
             itens.append(prep_h(fotos[1], TX, y - 2 * bh - gap, CW, bh, f'r{n}_1'))
             y = y - 2 * bh - gap - 28
         elif len(fotos) == 3:
             # 1 larga em cima + 2 lado a lado embaixo
-            bh1, bh2 = 236.0, 184.0
+            bh1, bh2 = 236.0 * _k, 184.0 * _k
             itens.append(prep_h(fotos[0], TX, y - bh1, CW, bh1, f'r{n}_0'))
             itens.append(prep_h(fotos[1], TX, y - bh1 - gap - bh2, hw, bh2, f'r{n}_1'))
             itens.append(prep_h(fotos[2], TX + hw + gap, y - bh1 - gap - bh2, hw, bh2,
@@ -565,11 +630,11 @@ def gerar(dados, saida):
             y = y - bh1 - gap - bh2 - 28
         else:
             # 4 fotos: grade 2x2
-            bh = 210.0
-            for _k in range(4):
-                _cx = TX + (_k % 2) * (hw + gap)
-                _cy = y - (_k // 2 + 1) * bh - (_k // 2) * gap
-                itens.append(prep_h(fotos[_k], _cx, _cy, hw, bh, f'r{n}_{_k}'))
+            bh = 210.0 * _k
+            for _j in range(4):
+                _cx = TX + (_j % 2) * (hw + gap)
+                _cy = y - (_j // 2 + 1) * bh - (_j // 2) * gap
+                itens.append(prep_h(fotos[_j], _cx, _cy, hw, bh, f'r{n}_{_j}'))
             y = y - 2 * bh - gap - 28
         desenha_h(c, itens)
 
@@ -585,23 +650,50 @@ def gerar(dados, saida):
         fecha(c)
 
     # ============================ INVESTIMENTO ============================
-    c.setFillColorRGB(*WHITE)
-    c.rect(0, 0, W, H, fill=1, stroke=0)
-    ghost(c, '$', W - RM, H - 150)
-    y = cabeca(c, 'RESUMO', 'Investimento')
-    c.setFont('PopM', 7)
-    c.setFillColorRGB(*GREY)
-    c.drawString(TX, y + 16, 'AMBIENTE')
-    c.drawRightString(W - RM, y + 16, 'VALOR')
-    fio(c, TX, W - RM, y + 6, CHAR, 0.8)
-    y -= 18
+    # A tabela pagina sozinha. Antes ela assumia que tudo cabia numa folha: com
+    # muitos ambientes os ultimos sumiam e — pior — o bloco de TOTAL, validade e
+    # forma de pagamento nem chegava a ser desenhado.
+    _LIM_BAIXO = 96.0          # nao invade o rodape
+    _ALT_TOTAL = 96.0          # faixa preta do total
+    _ALT_COND = 92.0           # validade + forma de pagamento
+
+    def _abre_investimento(cont=False):
+        c.setFillColorRGB(*WHITE)
+        c.rect(0, 0, W, H, fill=1, stroke=0)
+        ghost(c, '$', W - RM, H - 150)
+        yy = cabeca(c, 'RESUMO', 'Investimento' if not cont else 'Investimento',
+                    maxw=CW - 96)
+        if cont:
+            c.setFont('PopL', 8)
+            c.setFillColorRGB(*GREY)
+            c.drawString(TX, yy + 34, 'continuação')
+        c.setFont('PopM', 7)
+        c.setFillColorRGB(*GREY)
+        c.drawString(TX, yy + 16, 'AMBIENTE')
+        c.drawRightString(W - RM, yy + 16, 'VALOR')
+        fio(c, TX, W - RM, yy + 6, CHAR, 0.8)
+        return yy - 18
+
+    def _altura_linha(nome, desc):
+        """Quanto a linha vai ocupar, para decidir a quebra ANTES de desenhar."""
+        n_nome = len(wrap(nome, 'PopM', 12.5, CW - 170))
+        n_desc = len(wrap(desc, 'PopL', 8.2, CW - 150)) if desc else 0
+        return (n_nome - 1) * 15 + 20 + n_desc * 12.5 + 34
+
+    y = _abre_investimento()
     for n, nome, val, parc, desc, fotos in AMBIENTES:
+        if y - _altura_linha(nome, desc) < _LIM_BAIXO:
+            fecha(c)
+            y = _abre_investimento(cont=True)
         c.setFont('Lora', 30)
         c.setFillColorRGB(*SAND)
         c.drawString(TX - 42, y - 8, n)
+        # nome tambem quebra em vez de invadir a coluna do valor
+        _lnome = wrap(nome, 'PopM', 12.5, CW - 170)
         c.setFont('PopM', 12.5)
         c.setFillColorRGB(*CHAR)
-        c.drawString(TX, y, nome)
+        for _i, _l in enumerate(_lnome):
+            c.drawString(TX, y - _i * 15, _l)
         c.setFont('Lora', 16)
         c.setFillColorRGB(*CHAR)
         c.drawRightString(W - RM, y, brl(val))
@@ -609,10 +701,15 @@ def gerar(dados, saida):
             c.setFont('PopL', 7.6)
             c.setFillColorRGB(*BRONZE)
             c.drawRightString(W - RM, y - 14, f'ou {NPARC}x de {brl(parc)}')
+        y -= (len(_lnome) - 1) * 15
         yy = para(c, desc, TX, y - 20, 'PopL', 8.2, 12.5, CW - 150, GREY)
         fio(c, TX, W - RM, yy - 8, LINE, 0.5)
         y = yy - 34
 
+    # o total e as condicoes andam juntos: se nao couberem, vao para a proxima
+    if y - 56 - _ALT_TOTAL - _ALT_COND < _LIM_BAIXO:
+        fecha(c)
+        y = _abre_investimento(cont=True) + 18   # sem cabecalho de colunas util
     y -= 56
     c.setFillColorRGB(*CHAR)
     c.rect(TX - 14, y - 86, W - (TX - 14), 86, fill=1, stroke=0)
@@ -853,30 +950,67 @@ def gerar(dados, saida):
                      TX, y + 10, 'PopL', 9, 14, CW, GREY) - 26
 
         # --- destaque: arquiteto do projeto ---
-        dh = 128.0
-        dw = dh * 594 / 616
         _nome = ARQ.get('nome') or 'Arquiteto'
         _insta = ARQ.get('insta') or ''
         _primeiro = _nome.replace('Arquiteto', '').replace('Arquiteta', '').strip().split(' ')[0]
         _fpath = _foto if _tipo == 'novo' else (AS + 'arq_diego.jpg')
-        arco(c, TX, y - dh - 6, dw, dh + 22, SAND)
-        c.drawImage(cover(_fpath, dw - 12, dh - 12, 'diego', focus=0.4),
-                    TX + 6, y - dh + 0, dw - 12, dh - 12)
-        tx2 = TX + dw + 24
-        tracked(c, 'ARQUITETO DO PROJETO', tx2, y - 16, 'PopM', 7, 2.8, BRONZE)
-        c.setFont('Lora', 22)
-        c.setFillColorRGB(*CHAR)
-        c.drawString(tx2, y - 44, _nome)
-        if _insta:
-            c.setFont('PopL', 9)
-            c.setFillColorRGB(*BRONZE)
-            c.drawString(tx2, y - 61, _insta)
-        # frase sem genero: a lista tem homens e mulheres, e antes saia
-        # "do arquiteto Karin", "do arquiteto Luana"...
-        para(c, 'A assinatura por trás deste projeto. É da visão de ' + _primeiro +
-                ' que nasce cada ambiente desta proposta — e é com profissionais assim que a '
-                'D’Coratto constrói seus melhores trabalhos.',
-             tx2, y - 84, 'PopL', 8.4, 13, W - RM - tx2, MID)
+
+        if SO_ESTE_ARQ:
+            # Sozinho na pagina: foto grande em cima e texto embaixo, em largura
+            # cheia. Tentei foto grande com texto AO LADO e a coluna sobrou com
+            # 136pt — o kicker ja estourava a margem.
+            fw2 = 320.0
+            fh2 = 330.0
+            fx2 = TX + (CW - fw2) / 2.0
+            arco(c, fx2, y - fh2 - 6, fw2, fh2 + 24, SAND)
+            c.drawImage(cover(_fpath, fw2 - 14, fh2 - 14, 'arqdest', focus=0.38),
+                        fx2 + 7, y - fh2 + 1, fw2 - 14, fh2 - 14)
+            y = y - fh2 - 34
+            tracked(c, 'ARQUITETO DO PROJETO', TX, y, 'PopM', 7, 2.8, BRONZE)
+            y -= 30
+            _ln, _tn = _ajusta_titulo(_nome, 'Lora', 28, CW)
+            c.setFont('Lora', _tn)
+            c.setFillColorRGB(*CHAR)
+            for _i, _l in enumerate(_ln):
+                c.drawString(TX, y - _i * (_tn * 1.16), _l)
+            y -= (len(_ln) - 1) * (_tn * 1.16)
+            if _insta:
+                c.setFont('PopL', 10)
+                c.setFillColorRGB(*BRONZE)
+                c.drawString(TX, y - 20, _insta)
+                y -= 20
+            fio(c, TX, W - RM, y - 18, LINE, 0.6)
+            y = para(c, 'A assinatura por trás deste projeto. É da visão de ' + _primeiro +
+                        ' que nasce cada ambiente desta proposta: a leitura do espaço, a escolha '
+                        'dos materiais e a proporção de cada peça. A D’Coratto executa o que foi '
+                        'desenhado, com marmoraria própria e acabamentos especiais — para que o '
+                        'projeto chegue à obra exatamente como foi concebido.',
+                     TX, y - 40, 'PopL', 9.2, 15, CW, MID) - 18
+            c.setFont('LoraIt', 15)
+            c.setFillColorRGB(*CHAR)
+            c.drawString(TX, y, 'Projeto e execução, na mesma direção.')
+        else:
+            dh = 128.0
+            dw = dh * 594 / 616
+            arco(c, TX, y - dh - 6, dw, dh + 22, SAND)
+            c.drawImage(cover(_fpath, dw - 12, dh - 12, 'diego', focus=0.4),
+                        TX + 6, y - dh + 0, dw - 12, dh - 12)
+            tx2 = TX + dw + 24
+            tracked(c, 'ARQUITETO DO PROJETO', tx2, y - 16, 'PopM', 7, 2.8, BRONZE)
+            c.setFont('Lora', 22)
+            c.setFillColorRGB(*CHAR)
+            c.drawString(tx2, y - 44, _nome)
+            if _insta:
+                c.setFont('PopL', 9)
+                c.setFillColorRGB(*BRONZE)
+                c.drawString(tx2, y - 61, _insta)
+            # frase sem genero: a lista tem homens e mulheres, e antes saia
+            # "do arquiteto Karin", "do arquiteto Luana"...
+            para(c, 'A assinatura por trás deste projeto. É da visão de ' + _primeiro +
+                    ' que nasce cada ambiente desta proposta — e é com profissionais assim '
+                    'que a D’Coratto constrói seus melhores trabalhos.',
+                 tx2, y - 84, 'PopL', 8.4, 13, W - RM - tx2, MID)
+
         if not SO_ESTE_ARQ:
             fio(c, TX, W - RM, y - dh - 22, LINE, 0.5)
             y = y - dh - 52
